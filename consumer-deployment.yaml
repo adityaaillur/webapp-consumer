@@ -1,0 +1,31 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: cve-consumer
+  namespace: ns1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cve-consumer
+  template:
+    metadata:
+      labels:
+        app: cve-consumer
+    spec:
+      containers:
+        - name: cve-consumer
+          image: 307298369337.dkr.ecr.us-east-1.amazonaws.com/cve-consumer:latest
+          env:
+            - name: KAFKA_BROKERS
+              value: "kafka-0.kafka-headless.kafka.svc.cluster.local:9092,kafka-1.kafka-headless.kafka.svc.cluster.local:9092,kafka-2.kafka-headless.kafka.svc.cluster.local:9092"
+            - name: KAFKA_TOPIC
+              value: "cve"
+            - name: DB_HOST
+              value: "host.docker.internal" # This allows connecting to the host machine from inside the container
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_USER
+              value: "postgres" # Replace with your PostgreSQL username
+            - name: DB_NAME
+              value: "cve"

@@ -1,0 +1,5 @@
+logs/
+.git*
+*.md
+.cache
+Jenkins*

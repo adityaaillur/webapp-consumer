@@ -1,0 +1,73 @@
+pipeline {
+    agent any
+    
+    environment {
+        GITHUB_CREDENTIALS_ID = 'github'
+        DOCKERHUB_CREDENTIALS_ID = 'dockerhub'
+        DOCKERHUB_REPO = 'chlokesh1306/cve-consumer' 
+        VERSION_SCRIPT_PATH = '/usr/local/bin/get_next_version.sh'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                script {
+                    checkout scm
+                }
+            }
+        }
+        stage('Determine Version') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: GITHUB_CREDENTIALS_ID, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                    script {
+                        sh """
+                            git config --global credential.helper store
+                            echo "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com" > ~/.git-credentials
+                            git config --global credential.helper 'cache --timeout=3600'
+                        """
+                        newVersion = sh(script: 'bash ${WORKSPACE}/get_next_version.sh', returnStdout: true).trim()
+                        echo "New Version: ${newVersion}"
+                    }
+                }
+            }
+        }
+        stage('Setup Docker and Build') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                  docker.withRegistry('', env.DOCKERHUB_CREDENTIALS_ID) {
+                    sh 'docker run --rm --privileged multiarch/qemu-user-static --reset -p yes'
+                    sh 'docker buildx create --name cve-consumer --driver docker-container --use || docker buildx use cve-consumer'
+                    sh 'docker buildx inspect cve-consumer --bootstrap'
+                    sh """
+                        docker buildx build \
+                        --platform linux/amd64,linux/arm64 \
+                        -t ${DOCKERHUB_REPO}:${newVersion} \
+                        --push .
+                    """
+                }
+            }
+        }
+        }
+        stage('Tag and Push Version') {
+            when {
+                branch 'main'
+            }
+            steps {
+                script {
+                    withCredentials([usernamePassword(credentialsId: env.GITHUB_CREDENTIALS_ID, passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) {
+                        sh """
+                            git tag ${newVersion}
+                            git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/cyse7125-su24-team15/webapp-cve-consumer.git ${newVersion}
+                        """
+                    }
+                }
+            }
+        }
+    }
+}
